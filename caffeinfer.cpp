@@ -34,8 +34,9 @@ static const float pixel_scale = 0.007843;
 const char* INPUT_BLOB_NAME = "data";
 const char* OUTPUT_BLOB_NAME = "mbox_conf_softmax";
 
+const std::string CLASSES[3]{"Background", "umbrella", "carringbag"}; // background offset
 // const std::string img_list = "/home/ubuntu/SSD/software/TensorRT-5.1.2.2/data/ssd/10image.txt";
-const std::string img_list = "/home/ubuntu/SSD/software/TensorRT-5.1.2.2/data/centernet/carringBag_calibration.txt";
+const std::string img_list = "/home/ubuntu/SSD/lq/tools/test_file.txt";
 
 samplesCommon::Args gArgs;
 
@@ -227,6 +228,9 @@ int main(int argc, char** argv) {
 	std::vector<std::string> infLst = readTxt(img_list);
     gLogInfo << "Infering begin...";
     std::vector<float> umbreConf, carrinConf;
+    clock_t start, finish;
+    float totalDur = 0;
+    start = clock();
     for (int btNm = 0; btNm < int (infLst.size() / batchsize); btNm++){ // todo :when batch is incompelte.
         std::vector<string> fInBc(infLst.begin() + btNm * batchsize, infLst.begin() + btNm * batchsize + batchsize);
 		std::vector<std::pair<int, int>> WH(batchsize); 
@@ -234,22 +238,40 @@ int main(int argc, char** argv) {
         std::vector<float> carrinMax(batchsize);
 
 		float *blob = prepare_image(fInBc, batchsize, WH);
+		// start = clock();
     	doInference(*context, blob, output, batchsize); 
 		// writeoutput(output, batchsize);
         postprocess(output, batchsize, umbreMax, carrinMax);
         // for (int k = 0; k < batchsize; k++) printf("%dth images:%f , %f\n", k, umbreMax[k], carrinMax[k]);
 		umbreConf.insert(umbreConf.end(), umbreMax.begin(), umbreMax.end());
 		carrinConf.insert(carrinConf.end(), carrinMax.begin(), carrinMax.end());
+		// finish = clock();
+		// float Dur = finish - start;
+		// totalDur += Dur;
         } 
-    //for (int k = 0; k < umbreConf.size(); k++) printf("%dth images:%f , %f\n", k, umbreConf[k], carrinConf[k]); 
+    // for (int k = 0; k < umbreConf.size(); k++) printf("%dth images:%f , %f\n", k, umbreConf[k], carrinConf[k]); 
 
     int resLength = umbreConf.size();
     std::vector<bool> umbreRes, carrinRes;
     for (int k = 0; k < resLength; k++) {
         if (umbreConf[k] >= SSD_THRESH) umbreRes.push_back(true); else umbreRes.push_back(false);
         if (carrinConf[k] >= SSD_THRESH) carrinRes.push_back(true); else carrinRes.push_back(false);
-        std::cout << k << "th images:" << umbreRes[k] << "," << carrinRes[k] << std::endl;
+        // std::cout << infLst[k] << ":" << umbreRes[k] << "," << carrinRes[k] << std::endl;
+        std::cout << infLst[k] << ": ";
+        if (umbreRes[k] && carrinRes[k])
+            printf("Two obj detected.\n");
+        else if (umbreRes[k])
+            printf("umbrealla.\n");
+        else if (carrinRes[k])
+        	printf("carringbag.\n");
+        else 
+        	printf("nothing detected.\n");
     }
+
+    finish = clock();
+    totalDur = finish - start;
+    printf("use Time:%f, %d, %f\n", totalDur/CLOCKS_PER_SEC, int(infLst.size()), totalDur/CLOCKS_PER_SEC/infLst.size());
+    // printf("use Time:%f, %d, %f\n", totalDur/CLOCKS_PER_SEC, 590, totalDur/CLOCKS_PER_SEC/590);
     
     // destroy the engine
     context->destroy();
